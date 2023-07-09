@@ -1,19 +1,49 @@
-const keyTokenModel = require('../models/keyToken.model')
+const crypto = require("crypto");
+const {
+    Types: { ObjectId },
+} = require("mongoose");
+const keyTokenModel = require("../models/keyToken.model");
 
 class KeyTokenService {
-    static createKeyToken = async ({userId, publicKey}) => {
+    static createKeyToken = async ({ userId, publicKey, refreshToken }) => {
         try {
+            // convert to String to save in db
             const publicKeyString = publicKey.toString();
-            const tokens = await keyTokenModel.create({
-                user: userId,
-                publicKey: publicKeyString
-            })
 
-            return tokens ? tokens.publicKey : null;
+            const filter = { user: userId };
+            const update = {
+                publicKey: publicKeyString,
+                refreshTokensUsed: [],
+                refreshToken,
+            };
+            const options = {
+                upsert: true,
+                new: true,
+            };
+
+            const tokens = await keyTokenModel.findOneAndUpdate(
+                filter,
+                update,
+                options
+            );
+
+            // convert to pem format to return
+            return tokens ? crypto.createPublicKey(tokens.publicKey) : null;
         } catch (error) {
-            throw error
+            throw error;
         }
-    }
+    };
+
+    static findByUserId = async (userId) => {
+        return await keyTokenModel
+            .findOne({ user: new ObjectId(userId) })
+            .lean();
+    };
+
+    static removeById = async (id) => {
+        console.log(`id::::::::`,id)
+        return await keyTokenModel.deleteOne({_id : id});
+    };
 }
 
 module.exports = KeyTokenService;
