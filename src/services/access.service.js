@@ -1,5 +1,6 @@
 const shopModel = require("../models/shop.model");
 const bcrypt = require("bcrypt");
+const JWT = require("jsonwebtoken");
 const KeyTokenService = require("./keyToken.service");
 const { createTokenPair } = require("../auth/authUtils");
 const { getInfoData, generatePubPriKey } = require("../utils");
@@ -7,6 +8,7 @@ const {
     BadRequestError,
     ConflictRequestError,
     AuthFailureError,
+    ForbiddenError,
 } = require("../core/error.response");
 const { findByEmail } = require("./shop.service");
 
@@ -18,17 +20,73 @@ const RoleShop = {
 };
 
 class AccessService {
+    static handleRefreshToken = async (refreshToken) => {
+        const foundToken = await KeyTokenService.findByRefreshTokensUsed(
+            refreshToken
+        );
+
+        if (foundToken) {
+            const { userId, email } = JWT.verify(
+                refreshToken,
+                foundToken.publicKey
+            );
+
+            await KeyTokenService.deleteKeyById(userId);
+            throw new ForbiddenError(
+                `Something went wrong! Please log in and try again.`
+            );
+        }
+
+        const holderToken = await KeyTokenService.findByRefreshToken(
+            refreshToken
+        );
+        if (!holderToken) {
+            throw new AuthFailureError(`Shop has not registered`);
+        }
+
+        const { userId, email } = JWT.verify(
+            refreshToken,
+            holderToken.publicKey
+        );
+
+        const foundShop = await findByEmail({ email });
+        if (!foundShop) throw new AuthFailureError(`Shop has not registered`);
+
+        const { publicKey, privateKey } = generatePubPriKey();
+        const tokens = await createTokenPair(
+            { userId: foundShop._id, email },
+            publicKey,
+            privateKey
+        );
+
+        await holderToken.updateOne(
+            {
+                $set: {
+                    refreshToken: tokens.refreshToken,
+                    publicKey: publicKey.toString(),
+                },
+                $addToSet: {
+                    refreshTokensUsed: refreshToken,
+                },
+            }
+        );
+
+        return {
+            user: { userId, email },
+            tokens,
+        };
+    };
 
     static logout = async (keyStore) => {
-        return await KeyTokenService.removeById(keyStore._id)
-    }
+        return await KeyTokenService.removeById(keyStore._id);
+    };
 
-    static login = async ({email, password, refreshToken = null}) => {
-        const foundShop = await findByEmail({email})
-        if (!foundShop) throw new BadRequestError(`Shop has not registered`)
+    static login = async ({ email, password, refreshToken = null }) => {
+        const foundShop = await findByEmail({ email });
+        if (!foundShop) throw new BadRequestError(`Shop has not registered`);
 
-        const match = await bcrypt.compare(password, foundShop.password)
-        if (!match) throw new AuthFailureError(`Authentication failed`)
+        const match = await bcrypt.compare(password, foundShop.password);
+        if (!match) throw new AuthFailureError(`Authentication failed`);
 
         // re-create private key and public key
         const { publicKey, privateKey } = generatePubPriKey();
@@ -53,7 +111,7 @@ class AccessService {
             }),
             tokens,
         };
-    }
+    };
 
     static signUp = async ({ name, email, password }) => {
         // check existing email
