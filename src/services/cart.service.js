@@ -1,53 +1,14 @@
 const cartModel = require("../models/cart.model");
 const { getProductById } = require("../models/repositories/product.repo");
 const { NotFoundError } = require("../core/error.response");
+const { createUserCart, updateUserCartQuantity } = require("../models/repositories/cart.repo");
 
 class CartService {
-    /// START CART REPO ///
-
-    static async createUserCart({ userId, product }) {
-        const query = {
-            userId,
-            state: "active",
-        };
-        const updateOrInsert = {
-            $addToSet: {
-                products: product,
-            },
-        };
-        const options = {
-            upsert: true,
-            new: true,
-        };
-        return await cartModel.findOneAndUpdate(query, updateOrInsert, options);
-    }
-
-    static async updateUserCartQuantity({ userId, product }) {
-        const { productId, quantity } = product;
-        const query = {
-            userId,
-            "products.productId": productId,
-            state: "active",
-        };
-        const updateSet = {
-            $inc: {
-                "products.$.quantity": quantity,
-            },
-        };
-        const options = {
-            upsert: true,
-            new: true,
-        };
-
-        return await cartModel.findOneAndUpdate(query, updateSet, options);
-    }
-
-    /// END CART REPO ///
 
     static async addToCart({ userId, product = {} }) {
         const userCart = await cartModel.findOne({ userId });
         if (!userCart) {
-            return await CartService.createUserCart({ userId, product });
+            return await createUserCart({ userId, product });
         }
         
         console.log(userCart);
@@ -56,7 +17,7 @@ class CartService {
             return await userCart.save();
         }
 
-        return await CartService.updateUserCartQuantity({ userId, product });
+        return await updateUserCartQuantity({ userId, product });
     }
 
     static async addToCartV2({ userId, shop_order_ids }) {
@@ -73,7 +34,7 @@ class CartService {
             // delete
         }
 
-        return await CartService.updateUserCartQuantity({
+        return await updateUserCartQuantity({
             userId,
             product: {
                 productId,
