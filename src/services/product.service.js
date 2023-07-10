@@ -68,7 +68,7 @@ class ProductFactory {
             sort,
             page,
             filter,
-            select: ["name", "price", "thumb"],
+            select: ["name", "price", "thumb", "shop"],
         });
     }
 
