@@ -19,6 +19,9 @@ var apiKeySchema = new mongoose.Schema({
         required: true,
         enum: ["0000", "1111", "2222"],
     },
+}, {
+    collection: COLLECTION_NAME,
+    timestamps: true,
 });
 
 //Export the model

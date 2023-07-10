@@ -1,5 +1,8 @@
 const _ = require("lodash");
 const crypto = require("crypto");
+const {Types} = require("mongoose");
+
+const parseObjectIdMongodb = id => new Types.ObjectId(id) 
 
 const getInfoData = ({ fields = [], object }) => {
     return _.pick(object, fields);
@@ -61,5 +64,6 @@ module.exports = {
     getSelectData,
     getUnSelectData,
     removeUnexpectedObject,
-    updateNestedObject
+    updateNestedObject,
+    parseObjectIdMongodb
 };

@@ -11,6 +11,7 @@ const {
     updateProductById,
 } = require("../models/repositories/product.repo");
 const { removeUnexpectedObject, updateNestedObject } = require("../utils");
+const { insertInventory } = require("../models/repositories/inventory.repo");
 
 class ProductFactory {
     static productRegistry = {};
@@ -95,7 +96,17 @@ class Product {
     }
 
     async createProduct(productId) {
-        return await product.create({ ...this, _id: productId });
+        const newProduct = await product.create({ ...this, _id: productId });
+        if (newProduct) {
+            // add inventory
+            await insertInventory({
+                productId: newProduct._id,
+                shopId: this.shop,
+                stock: this.quantity,
+            })
+        }
+
+        return newProduct;
     }
 
     async updateProduct(productId, payload) {
