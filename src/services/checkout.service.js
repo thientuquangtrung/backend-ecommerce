@@ -2,6 +2,8 @@ const { findCartById } = require("../models/repositories/cart.repo");
 const { NotFoundError, BadRequestError } = require("../core/error.response");
 const { checkProductByServer } = require("../models/repositories/product.repo");
 const { getDiscountAmount } = require("./discount.service");
+const { acquireLock, releaseLock } = require("./redis.service");
+const orderModel = require("../models/order.model");
 
 class CheckoutService {
     static async checkoutReview({ cartId, userId, shop_order_ids }) {
@@ -57,15 +59,69 @@ class CheckoutService {
             }
 
             checkout_order.totalCheckout += itemCheckout.priceApplyDiscount;
-            shop_order_ids_new.push(itemCheckout)
+            shop_order_ids_new.push(itemCheckout);
         }
 
         return {
             shop_order_ids,
             shop_order_ids_new,
-            checkout_order
-        }
+            checkout_order,
+        };
     }
+
+    static async orderByUser({
+        shop_order_ids,
+        userId,
+        cartId,
+        userAddress = {},
+        userPayment = {},
+    }) {
+        const { shop_order_ids_new, checkout_order } =
+            CheckoutService.checkoutReview({
+                cartId,
+                userId,
+                shop_order_ids,
+            });
+
+        // check over inventory
+        const acquireProducts = [];
+        const products = shop_order_ids_new.flatMap((order) => order.products);
+        for (let index = 0; index < products.length; index++) {
+            const { productId, quantity } = products[index];
+            const keyLock = await acquireLock(productId, quantity, cartId);
+            acquireProducts.push(keyLock ? true : false);
+            if (keyLock) await releaseLock(keyLock);
+        }
+
+        // check if over sell
+        if (acquireProducts.includes(false)) {
+            throw new BadRequestError(
+                `Some products have been updated. Please check your cart again`
+            );
+        }
+
+        const newOrder = await orderModel.create({
+            order_userId: userId,
+            order_checkout: checkout_order,
+            order_shipping: userAddress,
+            order_payment: userPayment,
+            order_products: shop_order_ids_new,
+        });
+
+        if (newOrder) {
+            // remove product in cart
+        }
+
+        return newOrder;
+    }
+
+    static async getOrdersByUser() {}
+
+    static async getOneOrderByUser() {}
+
+    static async cancelOrderByUser() {}
+
+    static async updateOrderStatusByShop() {}
 }
 
 module.exports = CheckoutService;
