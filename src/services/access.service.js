@@ -4,12 +4,7 @@ const JWT = require("jsonwebtoken");
 const KeyTokenService = require("./keyToken.service");
 const { createTokenPair } = require("../auth/authUtils");
 const { getInfoData, generatePubPriKey } = require("../utils");
-const {
-    BadRequestError,
-    ConflictRequestError,
-    AuthFailureError,
-    ForbiddenError,
-} = require("../core/error.response");
+const { BadRequestError, ConflictRequestError, AuthFailureError, ForbiddenError } = require("../core/error.response");
 const { findByEmail } = require("./shop.service");
 
 const RoleShop = {
@@ -21,55 +16,37 @@ const RoleShop = {
 
 class AccessService {
     static handleRefreshToken = async (refreshToken) => {
-        const foundToken = await KeyTokenService.findByRefreshTokensUsed(
-            refreshToken
-        );
+        const foundToken = await KeyTokenService.findByRefreshTokensUsed(refreshToken);
 
         if (foundToken) {
-            const { userId, email } = JWT.verify(
-                refreshToken,
-                foundToken.publicKey
-            );
+            const { userId, email } = JWT.verify(refreshToken, foundToken.publicKey);
 
             await KeyTokenService.deleteKeyById(userId);
-            throw new ForbiddenError(
-                `Something went wrong! Please log in and try again.`
-            );
+            throw new ForbiddenError(`Something went wrong! Please log in and try again.`);
         }
 
-        const holderToken = await KeyTokenService.findByRefreshToken(
-            refreshToken
-        );
+        const holderToken = await KeyTokenService.findByRefreshToken(refreshToken);
         if (!holderToken) {
             throw new AuthFailureError(`Shop has not registered`);
         }
 
-        const { userId, email } = JWT.verify(
-            refreshToken,
-            holderToken.publicKey
-        );
+        const { userId, email } = JWT.verify(refreshToken, holderToken.publicKey);
 
         const foundShop = await findByEmail({ email });
         if (!foundShop) throw new AuthFailureError(`Shop has not registered`);
 
         const { publicKey, privateKey } = generatePubPriKey();
-        const tokens = await createTokenPair(
-            { userId: foundShop._id, email },
-            publicKey,
-            privateKey
-        );
+        const tokens = await createTokenPair({ userId: foundShop._id, email }, publicKey, privateKey);
 
-        await holderToken.updateOne(
-            {
-                $set: {
-                    refreshToken: tokens.refreshToken,
-                    publicKey: publicKey.toString(),
-                },
-                $addToSet: {
-                    refreshTokensUsed: refreshToken,
-                },
-            }
-        );
+        await holderToken.updateOne({
+            $set: {
+                refreshToken: tokens.refreshToken,
+                publicKey: publicKey.toString(),
+            },
+            $addToSet: {
+                refreshTokensUsed: refreshToken,
+            },
+        });
 
         return {
             user: { userId, email },
@@ -92,11 +69,7 @@ class AccessService {
         const { publicKey, privateKey } = generatePubPriKey();
 
         // create tokens
-        const tokens = await createTokenPair(
-            { userId: foundShop._id, email },
-            publicKey,
-            privateKey
-        );
+        const tokens = await createTokenPair({ userId: foundShop._id, email }, publicKey, privateKey);
 
         await KeyTokenService.createKeyToken({
             userId: foundShop._id,
@@ -133,21 +106,17 @@ class AccessService {
             // create public key and private key
             const { publicKey, privateKey } = generatePubPriKey();
 
-            const publicKeyString = await KeyTokenService.createKeyToken({
+            const publicKeyObject = await KeyTokenService.createKeyToken({
                 userId: newShop._id,
                 publicKey,
             });
 
-            if (!publicKeyString) {
+            if (!publicKeyObject) {
                 throw new BadRequestError("publicKeyString error");
             }
 
             // create tokens
-            const tokens = await createTokenPair(
-                { userId: newShop._id, email },
-                publicKeyObject,
-                privateKey
-            );
+            const tokens = await createTokenPair({ userId: newShop._id, email }, publicKeyObject, privateKey);
 
             return {
                 shop: getInfoData({
