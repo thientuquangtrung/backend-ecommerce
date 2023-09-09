@@ -12,7 +12,9 @@ const {
 } = require("../models/repositories/product.repo");
 const { removeUnexpectedObject, updateNestedObject } = require("../utils");
 const { insertInventory } = require("../models/repositories/inventory.repo");
+const { pushNotificationToSystem } = require("./notification.service");
 
+//#region Factory Methods
 class ProductFactory {
     static productRegistry = {};
 
@@ -22,16 +24,14 @@ class ProductFactory {
 
     static async createProduct(type, payload) {
         const productClass = ProductFactory.productRegistry[type];
-        if (!productClass)
-            throw new BadRequestError(`Invalid product type: ${type}`);
+        if (!productClass) throw new BadRequestError(`Invalid product type: ${type}`);
 
         return new productClass(payload).createProduct();
     }
-    
+
     static async updateProduct(type, productId, payload) {
         const productClass = ProductFactory.productRegistry[type];
-        if (!productClass)
-            throw new BadRequestError(`Invalid product type: ${type}`);
+        if (!productClass) throw new BadRequestError(`Invalid product type: ${type}`);
 
         return new productClass(payload).updateProduct(productId);
     }
@@ -57,12 +57,7 @@ class ProductFactory {
         return await findAllPublishForShop({ query, limit, skip });
     }
 
-    static async findAllProducts({
-        sort = "ctime",
-        limit = 60,
-        page = 1,
-        filter = { isPublished: true },
-    }) {
+    static async findAllProducts({ sort = "ctime", limit = 60, page = 1, filter = { isPublished: true } }) {
         return await findAllProducts({
             limit,
             sort,
@@ -83,6 +78,7 @@ class ProductFactory {
         return await searchProductByUser({ keySearch });
     }
 }
+//#endregion Factory methods
 
 class Product {
     constructor({ name, thumb, price, quantity, type, shop, attributes }) {
@@ -103,7 +99,20 @@ class Product {
                 productId: newProduct._id,
                 shopId: this.shop,
                 stock: this.quantity,
+            });
+
+            // push notification to System
+            pushNotificationToSystem({
+                type: "SHOP_001",
+                receiverId: 1,
+                senderId: this.shop,
+                options: {
+                    product_name: this.name,
+                    shop_name: this.shop,
+                },
             })
+                .then(console.log)
+                .catch(console.error);
         }
 
         return newProduct;
@@ -135,8 +144,7 @@ class Electronic extends Product {
             ...this.attributes,
             shop: this.shop,
         });
-        if (!newElectronic)
-            throw new BadRequestError(`Create new electronic failed`);
+        if (!newElectronic) throw new BadRequestError(`Create new electronic failed`);
 
         const newProduct = await super.createProduct(newElectronic._id);
         if (!newProduct) throw new BadRequestError(`Create new product failed`);
@@ -156,12 +164,9 @@ class Electronic extends Product {
             });
         }
 
-        const updateProduct = await super.updateProduct(
-            productId,
-            updateNestedObject(objectParams)
-        );
+        const updateProduct = await super.updateProduct(productId, updateNestedObject(objectParams));
 
-        return updateProduct
+        return updateProduct;
     }
 }
 
